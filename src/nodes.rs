@@ -9,7 +9,7 @@
 
 use anyhow::{Context, Result};
 use k8s_openapi::api::core::v1::{Node, Taint};
-use k8s_openapi::chrono::{SecondsFormat, Utc};
+use k8s_openapi::jiff::Timestamp;
 use kube::api::{Api, GetParams, Patch, PatchParams, Request};
 use kube::Client;
 use log::{debug, info, warn};
@@ -39,6 +39,10 @@ const TAINT_PATCH_ATTEMPTS: u32 = 3;
 const CLAIM_PATCH_ATTEMPTS: u32 = 3;
 const LABEL_PATCH_ATTEMPTS: u32 = 5;
 const RESULT_PATCH_ATTEMPTS: u32 = 3;
+
+/// Spelled out because jiff prints sub-second digits by default, and this value is
+/// read back by whoever is watching the node.
+const FINISHED_AT_FORMAT: &str = "%Y-%m-%dT%H:%M:%SZ";
 
 /// The kubelet may be unreachable through the apiserver proxy, and the check using
 /// this is advisory, so it must not hold up the queue behind it.
@@ -349,7 +353,7 @@ impl NodeOps {
             ),
             (
                 keys.finished_at.clone(),
-                result.map(|_| Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)),
+                result.map(|_| Timestamp::now().strftime(FINISHED_AT_FORMAT).to_string()),
             ),
         ];
 

@@ -11,7 +11,7 @@
 use crate::job::sanitize_node;
 use k8s_openapi::api::core::v1::{Event, EventSource, Node, ObjectReference};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, Time};
-use k8s_openapi::chrono::Utc;
+use k8s_openapi::jiff::Timestamp;
 use kube::api::{Api, PostParams};
 use kube::Client;
 use log::{debug, warn};
@@ -87,7 +87,7 @@ fn build(
     reason: &str,
     message: &str,
 ) -> Event {
-    let now = Time(Utc::now());
+    let now = Time(Timestamp::now());
 
     Event {
         metadata: ObjectMeta {
