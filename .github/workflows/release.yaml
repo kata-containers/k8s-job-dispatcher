@@ -2,9 +2,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# Only amd64 and arm64 have GitHub-hosted native runners, so ppc64le and s390x
-# compile under emulation. That is slow, but it is a per-release cost and it
-# keeps one Dockerfile for every architecture.
+# No runner here executes arm64, ppc64le or s390x, so the Dockerfile
+# cross-compiles rather than spending hours in an emulated compiler.
 
 name: Release
 
@@ -27,9 +26,8 @@ jobs:
   publish:
     name: build and push
     runs-on: ubuntu-24.04
-    # Generous: ppc64le and s390x compile under emulation. Still bounded, since
-    # a wedged emulated build would otherwise hold a runner for six hours.
-    timeout-minutes: 120
+    # Bounded, so a wedged run does not hold a runner for six hours.
+    timeout-minutes: 45
     permissions:
       # contents to cut the release, id-token and attestations to sign what it
       # contains: a release nobody can verify is only marginally better than a
@@ -44,8 +42,7 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
           persist-credentials: false
 
-      # Registers the binfmt handlers for the three architectures the runner
-      # cannot execute itself.
+      # The cross-compiled builds need no emulation; the smoke tests do.
       - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
 
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0

@@ -528,6 +528,13 @@ s390x has no published musl `std` at all. ppc64le does, but no CI runner
 executes that architecture natively, so musl there would be a variable proven
 only under emulation.
 
+All four targets are cross-compiled, so `rustc` runs natively and building for
+s390x costs roughly what building for amd64 does. Pass `--platform` to pick one:
+
+```bash
+docker build --platform linux/s390x -t k8s-job-dispatcher:s390x .
+```
+
 ## History
 
 This started life as `kata-deploy-job-dispatcher` inside

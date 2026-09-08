@@ -21,7 +21,7 @@ runs:
       # compiler than the release image is built with is the thing being
       # prevented, and a silent fallback is how that would happen.
       run: |
-        channel="$(sed -n 's|^FROM rust:\([^-]*\)-.* AS rust-base|\1|p' Dockerfile)"
+        channel="$(sed -n 's|^FROM \(--platform=[^ ]* \)*rust:\([^-]*\)-.* AS rust-base|\2|p' Dockerfile)"
         test -n "${channel}" || {
           echo "::error::no rust-base stage in Dockerfile to read the version from"
           exit 1

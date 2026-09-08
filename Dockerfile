@@ -6,29 +6,57 @@
 # take a runtime image providing it: s390x has no musl std published at all, and
 # musl's ppc64le support is a variable nobody can test here, since no CI runner
 # executes that architecture natively.
+#
+# Toolchains are pinned to $BUILDPLATFORM: nothing here runs a target binary, and
+# emulating rustc cost an order of magnitude - 48 minutes for s390x alone.
 
 # The only place the compiler is named: CI installs this same version, and
 # dependabot bumps it here. Not the MSRV, which is Cargo.toml's rust-version.
-FROM rust:1.98.0-trixie AS rust-base
+FROM --platform=$BUILDPLATFORM rust:1.98.0-trixie AS rust-base
+ENV TARGET_SYSROOT=""
 
-# ring compiles C, and the cc crate wants musl-gcc once the target is musl.
-FROM rust-base AS musl-base
+# ring compiles C, so every target needs a C compiler emitting its code.
+
+# The one target that matches the build host, so stock musl-gcc suffices.
+FROM rust-base AS toolchain-amd64
+ENV RUST_TARGET=x86_64-unknown-linux-musl
 # hadolint ignore=DL3008
 RUN apt-get update && \
 	apt-get install -y --no-install-recommends musl-tools && \
 	rm -rf /var/lib/apt/lists/*
 
-FROM musl-base AS toolchain-amd64
-ENV RUST_TARGET=x86_64-unknown-linux-musl
-
-FROM musl-base AS toolchain-arm64
+# Debian ships no aarch64 musl-gcc. clang cross compiles against musl-dev:arm64's
+# headers, and rust-lld links against the CRT in the target's prebuilt std, which
+# is what avoids needing a full musl sysroot.
+FROM rust-base AS toolchain-arm64
 ENV RUST_TARGET=aarch64-unknown-linux-musl
+ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld
+ENV CC_aarch64_unknown_linux_musl=clang
+ENV CFLAGS_aarch64_unknown_linux_musl="--target=aarch64-unknown-linux-musl -isystem /usr/include/aarch64-linux-musl"
+# hadolint ignore=DL3008
+RUN dpkg --add-architecture arm64 && apt-get update && \
+	apt-get install -y --no-install-recommends clang lld musl-dev:arm64 && \
+	rm -rf /var/lib/apt/lists/*
 
 FROM rust-base AS toolchain-ppc64le
 ENV RUST_TARGET=powerpc64le-unknown-linux-gnu
+ENV TARGET_SYSROOT=/usr/powerpc64le-linux-gnu
+ENV CARGO_TARGET_POWERPC64LE_UNKNOWN_LINUX_GNU_LINKER=powerpc64le-linux-gnu-gcc
+ENV CC_powerpc64le_unknown_linux_gnu=powerpc64le-linux-gnu-gcc
+# hadolint ignore=DL3008
+RUN apt-get update && \
+	apt-get install -y --no-install-recommends crossbuild-essential-ppc64el && \
+	rm -rf /var/lib/apt/lists/*
 
 FROM rust-base AS toolchain-s390x
 ENV RUST_TARGET=s390x-unknown-linux-gnu
+ENV TARGET_SYSROOT=/usr/s390x-linux-gnu
+ENV CARGO_TARGET_S390X_UNKNOWN_LINUX_GNU_LINKER=s390x-linux-gnu-gcc
+ENV CC_s390x_unknown_linux_gnu=s390x-linux-gnu-gcc
+# hadolint ignore=DL3008
+RUN apt-get update && \
+	apt-get install -y --no-install-recommends crossbuild-essential-s390x && \
+	rm -rf /var/lib/apt/lists/*
 
 # Resolves to a stage above, which hadolint cannot see.
 # hadolint ignore=DL3006
@@ -53,11 +81,15 @@ RUN touch src/main.rs && \
 	cargo build --release --locked --target "${RUST_TARGET}" && \
 	cp "target/${RUST_TARGET}/release/k8s-job-dispatcher" /usr/local/bin/k8s-job-dispatcher
 
-# The notices are one text for every architecture, so this runs on the build
-# host rather than four times under emulation. --platform is ignored on a FROM
-# naming a stage, which is why this repeats the image instead of deriving from
-# rust-base; dependabot moves both lines as one dependency.
-FROM --platform=$BUILDPLATFORM rust:1.98.0-trixie AS notices
+# /usr/lib here is the build host's, so a glob would ship an amd64 libgcc in an
+# s390x image and the binary would not start. Empty for the static musl targets.
+RUN mkdir -p /staging && \
+	if [ -n "${TARGET_SYSROOT}" ]; then \
+		cp "${TARGET_SYSROOT}/lib/libgcc_s.so.1" /staging/; \
+	fi
+
+# One text for every architecture, so it builds once.
+FROM rust-base AS notices
 
 WORKDIR /src
 
@@ -89,7 +121,7 @@ FROM gcr.io/distroless/static-debian13:latest AS runtime-arm64
 # libstd records that dependency - without this copy the binary will not start.
 # hadolint ignore=DL3007
 FROM gcr.io/distroless/base-nossl-debian13:latest AS runtime-glibc
-COPY --from=builder /usr/lib/*-linux-gnu/libgcc_s.so.1 /usr/lib/
+COPY --from=builder /staging/libgcc_s.so.1 /usr/lib/
 
 FROM runtime-glibc AS runtime-ppc64le
 FROM runtime-glibc AS runtime-s390x
