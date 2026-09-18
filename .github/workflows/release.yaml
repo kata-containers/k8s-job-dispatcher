@@ -43,7 +43,7 @@ jobs:
           persist-credentials: false
 
       # The cross-compiled builds need no emulation; the smoke tests do.
-      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+      - uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4.3.0
 
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
@@ -115,7 +115,7 @@ jobs:
       # dev-dependencies too, which are in nothing shipped.
       - name: Install the pinned Rust toolchain
         uses: ./.github/actions/rust-toolchain
-      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2.87.2
+      - uses: taiki-e/install-action@d438492cf8a250514fa2d34b30bc3c0dc37c65ff # v2.87.8
         with:
           tool: cargo-sbom@0.10.0
 
