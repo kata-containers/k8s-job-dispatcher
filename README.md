@@ -340,6 +340,7 @@ yours.
 | --- | --- | --- |
 | `--node-label-key` | — | The label key to write. Required by the three flags below |
 | `--node-label` | — | Value to set once the node's Job succeeded |
+| `--extra-node-label` | — | Extra `key=value` to write alongside `--node-label`, repeatable. Requires `--node-label` or `--remove-node-label` |
 | `--remove-node-label` | `false` | Remove the key before the Job runs, for cleanup runs |
 | `--claim-node-pending` | `false` | Set the key to the pending value before the Job runs, unless already present |
 | `--node-label-pending-value` | `false` | The value meaning "claimed, not finished" |
@@ -373,6 +374,19 @@ A few of these are subtler than they look:
 - **`--remove-node-taints` requires `--node-label`**, because lifting a start-up
   taint before the node carries the label meant to gate workloads would let them
   arrive ungated.
+- **`--extra-node-label` carries none of `--node-label-key`'s ownership
+  semantics.** It is written at the same time and removed at the same time, but
+  it is never read by `--skip-satisfied-nodes`, never the ownership key
+  `--cleanup-job-template` looks for, and not protected by
+  `--instance-label-prefix`'s multi-instance bookkeeping — a cleanup drops it
+  outright, whatever the shared key's own fate. It exists for a value that
+  another system selects on but that this run has no reason to also use for
+  deciding which nodes are its own. A cleanup-only run passes it with
+  `--remove-node-label` and no value, naming the keys to take away.
+- **Its keys have to be its own.** A repeated key, or one that is also
+  `--node-label-key`'s or an instance marker's, is rejected at startup: its
+  unconditional cleanup would otherwise take away what the ownership
+  bookkeeping had decided to keep.
 
 #### Several instances sharing one label
 

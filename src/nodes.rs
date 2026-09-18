@@ -101,7 +101,7 @@ impl NodeLabelling {
             .map_or(self.key.as_str(), InstanceMarker::key)
     }
 
-    fn keys(&self) -> Vec<&str> {
+    pub fn keys(&self) -> Vec<&str> {
         let mut keys = vec![self.key.as_str()];
         if let Some(instance) = self.instance.as_ref() {
             keys.push(instance.key());
@@ -203,6 +203,9 @@ pub struct NodeOps {
     /// `None` leaves every node label alone.
     pub labelling: Option<NodeLabelling>,
     pub label_value: Option<String>,
+    /// Written and removed with `label_value`, but never read by
+    /// `is_satisfied` and never an ownership key.
+    pub extra_labels: Vec<(String, String)>,
     pub remove_label: bool,
     pub claim_pending: bool,
     /// Matchers, each `key` (any effect) or `key:effect`.
@@ -222,6 +225,7 @@ impl NodeOps {
             client: client.clone(),
             labelling: None,
             label_value: None,
+            extra_labels: Vec::new(),
             remove_label: false,
             claim_pending: false,
             remove_taints: Vec::new(),
@@ -490,6 +494,14 @@ impl NodeOps {
                     if labels.contains_key(shared_key) {
                         updates.push((shared_key.to_string(), None));
                     }
+                }
+            }
+
+            // Whatever the shared key's own fate: no other instance maintains
+            // these, so one left behind would report a state nobody holds.
+            for (key, _) in &self.extra_labels {
+                if labels.contains_key(key.as_str()) {
+                    updates.push((key.clone(), None));
                 }
             }
 
@@ -768,10 +780,18 @@ impl NodeOps {
             return Ok(());
         };
 
-        let wanted = labelling.keys();
+        // The ownership keys share the caller's one value; the extra labels
+        // each carry their own.
+        let mut wanted: Vec<(String, String)> = labelling
+            .keys()
+            .into_iter()
+            .map(|key| (key.to_string(), value.to_string()))
+            .collect();
+        wanted.extend(self.extra_labels.iter().cloned());
+
         let updates: Vec<(String, Option<String>)> = wanted
             .iter()
-            .map(|key| (key.to_string(), Some(value.to_string())))
+            .map(|(key, value)| (key.clone(), Some(value.clone())))
             .collect();
 
         for attempt in 1..=LABEL_APPLY_ATTEMPTS {
@@ -786,8 +806,12 @@ impl NodeOps {
                     Ok(labels) => {
                         let drifted: Vec<String> = wanted
                             .iter()
-                            .filter(|key| labels.get(**key).map(String::as_str) != Some(value))
-                            .map(|key| format!("{key}={:?}", labels.get(*key).map(String::as_str)))
+                            .filter(|(key, value)| {
+                                labels.get(key).map(String::as_str) != Some(value.as_str())
+                            })
+                            .map(|(key, _)| {
+                                format!("{key}={:?}", labels.get(key).map(String::as_str))
+                            })
                             .collect();
 
                         if drifted.is_empty() {
