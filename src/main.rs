@@ -167,6 +167,12 @@ struct Args {
     #[arg(long)]
     node_label: Option<String>,
 
+    /// Extra `key=value` to write alongside --node-label, repeatable. Removed
+    /// alongside it too, but never used to decide which nodes this instance
+    /// owns.
+    #[arg(long)]
+    extra_node_label: Vec<String>,
+
     /// Remove --node-label-key before creating a node's Job, so that whatever
     /// selects on it stops sending work there. For cleanup runs.
     #[arg(long, default_value_t = false)]
@@ -490,6 +496,69 @@ async fn nodes_owned_but_not_desired(
         .collect())
 }
 
+/// Split on the first `=`, so a value containing one survives.
+///
+/// The same key twice is rejected: one patch cannot set a key to two values,
+/// and the one that loses would then be waited on for ever.
+fn extra_labels_from_args(values: &[String]) -> Result<Vec<(String, String)>> {
+    let mut labels: Vec<(String, String)> = Vec::new();
+
+    for entry in values {
+        let (key, value) = entry
+            .split_once('=')
+            .map(|(key, value)| (key.trim().to_string(), value.to_string()))
+            .filter(|(key, _)| !key.is_empty())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "--extra-node-label {entry:?} is not key=value; give the label to write, \
+                     e.g. --extra-node-label=example.com/ready=true"
+                )
+            })?;
+
+        if labels.iter().any(|(seen, _)| seen == &key) {
+            bail!("--extra-node-label {key} was given more than once, with two values to write");
+        }
+        labels.push((key, value));
+    }
+
+    Ok(labels)
+}
+
+/// A shared key would let the extra label's unconditional cleanup take away
+/// what the ownership bookkeeping had decided to keep.
+fn check_extra_label_keys(
+    labelling: Option<&NodeLabelling>,
+    extra: &[(String, String)],
+) -> Result<()> {
+    let Some(labelling) = labelling else {
+        return Ok(());
+    };
+
+    for (key, _) in extra {
+        if labelling.keys().contains(&key.as_str()) {
+            bail!(
+                "--extra-node-label {key} is already written as an ownership key by \
+                 --node-label-key or --instance-label-prefix; give it a key of its own"
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Neither written nor removed without one of the two flags that do it.
+fn check_extra_label_flags(args: &Args) -> Result<()> {
+    let wants_labelling = args.node_label.is_some() || args.remove_node_label;
+    if !args.extra_node_label.is_empty() && !wants_labelling {
+        bail!(
+            "--extra-node-label needs --node-label or --remove-node-label: it is written \
+             alongside the first and removed alongside the second, and neither happens without \
+             one of them"
+        );
+    }
+    Ok(())
+}
+
 fn comma_separated(value: Option<&str>) -> Vec<String> {
     value
         .unwrap_or_default()
@@ -568,11 +637,17 @@ fn check_taint_flags(args: &Args) -> Result<()> {
 
 fn node_ops_from_args(client: &Client, args: &Args) -> Result<NodeOps> {
     check_taint_flags(args)?;
+    check_extra_label_flags(args)?;
+
+    let labelling = labelling_from_args(args)?;
+    let extra_labels = extra_labels_from_args(&args.extra_node_label)?;
+    check_extra_label_keys(labelling.as_ref(), &extra_labels)?;
 
     let mut ops = NodeOps::new(client, &args.tracking_label_prefix);
 
-    ops.labelling = labelling_from_args(args)?;
+    ops.labelling = labelling;
     ops.label_value = args.node_label.clone();
+    ops.extra_labels = extra_labels;
     ops.remove_label = args.remove_node_label;
     ops.claim_pending = args.claim_node_pending;
     ops.remove_taints = comma_separated(args.remove_node_taints.as_deref());
@@ -2564,6 +2639,94 @@ mod tests {
             "--remove-node-taints=example.com/startup",
         ]))
         .expect("a taint may be lifted once the node is labelled");
+    }
+
+    #[test]
+    fn extra_labels_are_split_into_pairs() {
+        assert_eq!(
+            extra_labels_from_args(&[
+                "example.com/ready=true".to_string(),
+                "example.com/mode=ppcie".to_string(),
+            ])
+            .unwrap(),
+            vec![
+                ("example.com/ready".to_string(), "true".to_string()),
+                ("example.com/mode".to_string(), "ppcie".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_extra_label_without_an_equals_is_rejected() {
+        let err = extra_labels_from_args(&["example.com/ready".to_string()])
+            .expect_err("a bare key has no value to write");
+        assert!(err.to_string().contains("is not key=value"), "{err}");
+    }
+
+    #[test]
+    fn only_the_first_equals_splits_an_extra_label() {
+        assert_eq!(
+            extra_labels_from_args(&["example.com/pair=a=b".to_string()]).unwrap(),
+            vec![("example.com/pair".to_string(), "a=b".to_string())]
+        );
+    }
+
+    #[test]
+    fn one_extra_label_key_cannot_be_given_twice() {
+        let err = extra_labels_from_args(&[
+            "example.com/ready=true".to_string(),
+            "example.com/ready=false".to_string(),
+        ])
+        .expect_err("one key cannot hold two values");
+        assert!(err.to_string().contains("more than once"), "{err}");
+    }
+
+    #[test]
+    fn an_extra_label_cannot_take_an_ownership_key() {
+        let labelling = labelling_from_args(&args_from(&[
+            "--node-label-key=example.com/ready",
+            "--node-label=true",
+            "--instance-label-prefix=deployer.example.com",
+            "--multi-install-suffix=dev",
+        ]))
+        .expect("a complete set of flags is valid");
+
+        for key in ["example.com/ready", "deployer.example.com/dev"] {
+            let err = check_extra_label_keys(
+                labelling.as_ref(),
+                &[(key.to_string(), "true".to_string())],
+            )
+            .expect_err("an ownership key is not an extra label's to write");
+            assert!(err.to_string().contains("ownership key"), "{err}");
+        }
+
+        check_extra_label_keys(
+            labelling.as_ref(),
+            &[("example.com/mode".to_string(), "ppcie".to_string())],
+        )
+        .expect("a key of its own is fine");
+    }
+
+    #[test]
+    fn an_extra_label_needs_something_to_write_or_remove_it_with() {
+        let err =
+            check_extra_label_flags(&args_from(&["--extra-node-label=example.com/ready=true"]))
+                .expect_err("nothing writes or removes an extra label on its own");
+        assert!(err.to_string().contains("--node-label"), "{err}");
+
+        check_extra_label_flags(&args_from(&[
+            "--node-label-key=example.com/ready",
+            "--node-label=true",
+            "--extra-node-label=example.com/mode=ppcie",
+        ]))
+        .expect("an extra label alongside --node-label is fine");
+
+        check_extra_label_flags(&args_from(&[
+            "--node-label-key=example.com/ready",
+            "--remove-node-label",
+            "--extra-node-label=example.com/mode=ppcie",
+        ]))
+        .expect("an extra label alongside --remove-node-label, with no value, is also fine");
     }
 
     #[test]
