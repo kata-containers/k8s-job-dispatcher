@@ -12,7 +12,7 @@
 
 # The only place the compiler is named: CI installs this same version, and
 # dependabot bumps it here. Not the MSRV, which is Cargo.toml's rust-version.
-FROM --platform=$BUILDPLATFORM rust:1.98.0-trixie AS rust-base
+FROM --platform=$BUILDPLATFORM rust:1.98.1-trixie AS rust-base
 ENV TARGET_SYSROOT=""
 
 # ring compiles C, so every target needs a C compiler emitting its code.
