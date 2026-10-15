@@ -268,7 +268,7 @@ async fn main() -> Result<()> {
     // tainted nodes the per-node Jobs may run on.
     let template_raw = std::fs::read_to_string(&args.job_template)
         .with_context(|| format!("failed to read job template {}", args.job_template))?;
-    let template: Job = serde_yaml::from_str(&template_raw)
+    let template: Job = serde_saphyr::from_str(&template_raw)
         .with_context(|| format!("failed to parse job template {}", args.job_template))?;
 
     let node_ops = Arc::new(node_ops_from_args(&client, &args)?);
@@ -417,7 +417,7 @@ async fn converge_removed_nodes(
 ) -> Result<Vec<Node>> {
     let cleanup_raw = std::fs::read_to_string(cleanup_path)
         .with_context(|| format!("failed to read cleanup job template {cleanup_path}"))?;
-    let cleanup_template: Job = serde_yaml::from_str(&cleanup_raw)
+    let cleanup_template: Job = serde_saphyr::from_str(&cleanup_raw)
         .with_context(|| format!("failed to parse cleanup job template {cleanup_path}"))?;
 
     let removed = nodes_owned_but_not_desired(client, ownership_key, desired_nodes).await?;

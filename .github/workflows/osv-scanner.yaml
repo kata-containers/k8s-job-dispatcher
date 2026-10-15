@@ -40,7 +40,6 @@ jobs:
     with:
       scan-args: |-
         -r
-        --skip-git
         ./
 
   scan-branch:
@@ -53,5 +52,4 @@ jobs:
     with:
       scan-args: |-
         -r
-        --skip-git
         ./
