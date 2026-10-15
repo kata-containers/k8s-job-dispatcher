@@ -161,7 +161,7 @@ jobs:
           test -n "${msrv}" || { echo "::error::no rust-version in Cargo.toml"; exit 1; }
           echo "version=${msrv}" >> "${GITHUB_OUTPUT}"
       - name: Install the declared MSRV toolchain
-        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master 2026-08-05
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master 2026-08-05
         with:
           toolchain: ${{ steps.msrv.outputs.version }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
@@ -182,7 +182,7 @@ jobs:
       - name: Install the pinned Rust toolchain
         uses: ./.github/actions/rust-toolchain
       # Prebuilt, so this does not compile the tool from source on every run.
-      - uses: taiki-e/install-action@d438492cf8a250514fa2d34b30bc3c0dc37c65ff # v2.87.8
+      - uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
         with:
           tool: cargo-deny
       - run: cargo deny --locked check
@@ -199,11 +199,11 @@ jobs:
           persist-credentials: false
       # udeps needs nightly-only -Z flags.
       - name: Install the Rust toolchain
-        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master 2026-08-05
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master 2026-08-05
         with:
           toolchain: nightly
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - uses: taiki-e/install-action@d438492cf8a250514fa2d34b30bc3c0dc37c65ff # v2.87.8
+      - uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
         with:
           tool: cargo-udeps
       - run: cargo udeps --locked --all-features
@@ -249,15 +249,15 @@ jobs:
       # The build needs no emulation; the smoke test below does.
       - name: Register the binfmt handlers
         if: ${{ matrix.arch != 'amd64' }}
-        uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4.3.0
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
 
-      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       # The Dockerfile builds dependencies against a placeholder entry point in
       # their own layer, so this cache turns a source-only change into a rebuild
       # of just this crate. Scoped per architecture, which build in parallel.
       - name: Build
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: linux/${{ matrix.arch }}
@@ -278,7 +278,7 @@ jobs:
 
       # A release ships this stage too, and it is a separate build target.
       - name: Export the binary
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           target: binary
