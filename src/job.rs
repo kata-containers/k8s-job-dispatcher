@@ -390,8 +390,63 @@ mod tests {
     }
 
     #[test]
+    fn job_template_preserves_yaml_aliases_and_script_content() {
+        let template: Job = serde_saphyr::from_str(
+            r#"
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: install
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: install
+          image: &image busybox:1.37
+          command:
+            - sh
+            - -c
+            - |
+              echo "installing"
+              echo "done"
+          securityContext:
+            privileged: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+        - name: verify
+          image: *image
+"#,
+        )
+        .unwrap();
+
+        let pod = template.spec.unwrap().template.spec.unwrap();
+        let install = &pod.containers[0];
+        assert_eq!(pod.containers[1].image, install.image);
+        assert_eq!(
+            install.command.as_ref().unwrap()[2],
+            "echo \"installing\"\necho \"done\"\n"
+        );
+        assert_eq!(
+            install.security_context.as_ref().unwrap().privileged,
+            Some(true)
+        );
+        let requests = install
+            .resources
+            .as_ref()
+            .unwrap()
+            .requests
+            .as_ref()
+            .unwrap();
+        assert_eq!(requests["cpu"].0, "100m");
+        assert_eq!(requests["memory"].0, "64Mi");
+    }
+
+    #[test]
     fn test_build_node_job_pins_node_and_labels() {
-        let template: Job = serde_yaml::from_str(
+        let template: Job = serde_saphyr::from_str(
             r#"
 apiVersion: batch/v1
 kind: Job
@@ -469,7 +524,7 @@ spec:
     /// than an empty one.
     #[test]
     fn unknown_facts_inject_nothing() {
-        let template: Job = serde_yaml::from_str(
+        let template: Job = serde_saphyr::from_str(
             r#"apiVersion: batch/v1
 kind: Job
 metadata:
@@ -513,7 +568,7 @@ spec:
 
     #[test]
     fn facts_reach_init_containers() {
-        let template: Job = serde_yaml::from_str(
+        let template: Job = serde_saphyr::from_str(
             r#"apiVersion: batch/v1
 kind: Job
 metadata:
@@ -572,7 +627,7 @@ spec:
     /// One fact missing must not keep the other from reaching the Job.
     #[test]
     fn facts_are_injected_independently() {
-        let template: Job = serde_yaml::from_str(
+        let template: Job = serde_saphyr::from_str(
             r#"apiVersion: batch/v1
 kind: Job
 metadata:
@@ -615,7 +670,7 @@ spec:
         let yaml = format!(
             "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: j\nstatus:\n{status_yaml}"
         );
-        serde_yaml::from_str(&yaml).unwrap()
+        serde_saphyr::from_str(&yaml).unwrap()
     }
 
     #[rstest]

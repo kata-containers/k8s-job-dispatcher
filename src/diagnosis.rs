@@ -263,14 +263,14 @@ mod tests {
     fn pod(status_yaml: &str) -> Pod {
         let yaml =
             format!("apiVersion: v1\nkind: Pod\nmetadata:\n  name: p\nstatus:\n{status_yaml}");
-        serde_yaml::from_str(&yaml).unwrap()
+        serde_saphyr::from_str(&yaml).unwrap()
     }
 
     fn job(status_yaml: &str) -> Job {
         let yaml = format!(
             "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: j\nstatus:\n{status_yaml}"
         );
-        serde_yaml::from_str(&yaml).unwrap()
+        serde_saphyr::from_str(&yaml).unwrap()
     }
 
     #[test]
@@ -462,7 +462,7 @@ mod tests {
     #[test]
     fn the_newest_pod_is_the_one_the_last_retry_left() {
         let attempt = |name: &str, stamp: &str| -> Pod {
-            serde_yaml::from_str(&format!(
+            serde_saphyr::from_str(&format!(
                 "apiVersion: v1\nkind: Pod\nmetadata:\n  name: {name}\n  creationTimestamp: {stamp}\n"
             ))
             .unwrap()
