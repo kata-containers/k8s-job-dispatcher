@@ -99,7 +99,7 @@ jobs:
         uses: ./.github/actions/rust-toolchain
         with:
           components: clippy
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           # A failed lint still leaves the dependency build behind, and a retry
           # should not pay for it twice.
@@ -120,7 +120,7 @@ jobs:
           persist-credentials: false
       - name: Install the pinned Rust toolchain
         uses: ./.github/actions/rust-toolchain
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-on-failure: true
       - run: cargo test --locked --all-features -- --include-ignored
@@ -137,7 +137,7 @@ jobs:
           persist-credentials: false
       - name: Install the pinned Rust toolchain
         uses: ./.github/actions/rust-toolchain
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo doc --no-deps --all-features --locked
         env:
           RUSTDOCFLAGS: -D warnings
@@ -161,10 +161,10 @@ jobs:
           test -n "${msrv}" || { echo "::error::no rust-version in Cargo.toml"; exit 1; }
           echo "version=${msrv}" >> "${GITHUB_OUTPUT}"
       - name: Install the declared MSRV toolchain
-        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master 2026-08-05
+        uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master 2026-08-05
         with:
           toolchain: ${{ steps.msrv.outputs.version }}
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo build --locked --all-targets
 
   # No separate `cargo audit` job: cargo-deny's advisories check reads the same
@@ -182,7 +182,7 @@ jobs:
       - name: Install the pinned Rust toolchain
         uses: ./.github/actions/rust-toolchain
       # Prebuilt, so this does not compile the tool from source on every run.
-      - uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
+      - uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2.90.4
         with:
           tool: cargo-deny
       - run: cargo deny --locked check
@@ -199,11 +199,11 @@ jobs:
           persist-credentials: false
       # udeps needs nightly-only -Z flags.
       - name: Install the Rust toolchain
-        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master 2026-08-05
+        uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master 2026-08-05
         with:
           toolchain: nightly
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2.90.4
         with:
           tool: cargo-udeps
       - run: cargo udeps --locked --all-features
