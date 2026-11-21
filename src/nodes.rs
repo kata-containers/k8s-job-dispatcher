@@ -9,6 +9,7 @@
 
 use anyhow::{Context, Result};
 use k8s_openapi::api::core::v1::{Node, Taint};
+use k8s_openapi::jiff::fmt::friendly::SpanParser;
 use k8s_openapi::jiff::Timestamp;
 use kube::api::{Api, GetParams, Patch, PatchParams, Request};
 use kube::Client;
@@ -1017,7 +1018,9 @@ impl NodeOps {
             }
         };
 
-        let parsed = match humantime::parse_duration(&timeout) {
+        // /configz reports Go-style durations ("2m0s"). Jiff is also used for
+        // Kubernetes timestamps and can parse these without another dependency.
+        let parsed = match SpanParser::new().parse_unsigned_duration(&timeout) {
             Ok(parsed) => parsed,
             Err(err) => {
                 warn!(
@@ -1261,6 +1264,33 @@ mod tests {
 
     const SHARED_KEY: &str = "example.com/ready";
     const MARKER_PREFIX: &str = "deployer.example.com";
+
+    #[test]
+    fn kubelet_duration_formats() {
+        for (input, expected) in [
+            ("2m0s", Duration::from_secs(120)),
+            ("1h2m3s", Duration::from_secs(3723)),
+            ("1.5s", Duration::from_millis(1500)),
+            ("500ms", Duration::from_millis(500)),
+            ("1.5µs", Duration::from_nanos(1500)),
+            ("1ns", Duration::from_nanos(1)),
+            ("0s", Duration::ZERO),
+        ] {
+            assert_eq!(
+                SpanParser::new()
+                    .parse_unsigned_duration(input)
+                    .unwrap_or_else(|err| panic!("{input}: {err}")),
+                expected,
+                "{input}"
+            );
+        }
+        for input in ["", "invalid", "2", "-1s", "999999999999999999999h"] {
+            assert!(
+                SpanParser::new().parse_unsigned_duration(input).is_err(),
+                "{input}"
+            );
+        }
+    }
 
     fn labelling(instance: Option<&str>) -> NodeLabelling {
         NodeLabelling {
